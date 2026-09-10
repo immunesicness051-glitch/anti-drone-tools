@@ -1,0 +1,54 @@
+options:
+  parameters:
+    id: fhss_trace
+    title: FHSS Trace (receive-only)
+    description: >
+      Receive-only flowgraph for observing frequency-hopping signals
+      (e.g. many consumer drone control/video links). Uses an SDR
+      *source* (not sink) plus a wideband FFT/waterfall to visually
+      trace hop patterns. No transmit chain is included by design.
+blocks:
+  - name: samp_rate
+    id: variable
+    parameters: { value: '20e6' }
+  - name: center_freq
+    id: variable
+    parameters: { value: '2.44e9' }   # tune to band of interest, e.g. 2.4GHz drone band
+  - name: sdr_source
+    id: osmocom_source
+    parameters:
+      device_args: ''            # e.g. hackrf=0 or rtl=0
+      sample_rate: samp_rate
+      freq: center_freq
+      gain: '30'
+    comment: >
+      Receive-only SDR source block. Swap device_args for your hardware
+      (HackRF, RTL-SDR, USRP via UHD source instead).
+  - name: bandpass_filter
+    id: freq_xlating_fir_filter
+    parameters:
+      decim: '4'
+      taps: 'firdes.low_pass(1, samp_rate, 5e6, 1e6)'
+      center_freq: '0'
+      samp_rate: samp_rate
+    comment: Isolate the sub-band of interest before analysis.
+  - name: fft_sink
+    id: qtgui_waterfall_sink
+    parameters:
+      fft_size: '2048'
+      samp_rate: samp_rate
+      freq: center_freq
+    comment: Waterfall display for visually tracing hop sequences over time.
+  - name: hop_logger
+    id: python_block
+    parameters:
+      code: |
+        # Optional: peak-hold / hop-timestamp logger.
+        # Consume magnitude data from the FFT and log (timestamp, freq_bin)
+        # tuples to a CSV for later correlation with detected drone IDs.
+        # Intentionally left as a stub — implement per your analysis needs.
+    comment: Analysis/logging only — does not feed back into any TX path.
+connections:
+  - [sdr_source, '0', bandpass_filter, '0']
+  - [bandpass_filter, '0', fft_sink, '0']
+  - [bandpass_filter, '0', hop_logger, '0']
